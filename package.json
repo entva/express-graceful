@@ -34,8 +34,10 @@
     "build": "npm run build:esm && npm run build:cjs",
     "reinstall": "rm -rf node_modules package-lock.json && npm install",
     "lint": "eslint ./",
-    "prepublishOnly": "npm run lint && npm test && echo \"\\033[0;32mReady to publish\\033[0m\"",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "prepublishOnly": "npm run check && echo \"\\033[0;32mReady to publish\\033[0m\""
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
