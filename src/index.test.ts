@@ -7,6 +7,7 @@ const PORT = 3000;
 const createServer = () => ({
   listen: vi.fn().mockReturnThis(),
   close: vi.fn().mockReturnThis(),
+  closeIdleConnections: vi.fn(),
 });
 
 const createRes = () => ({
@@ -41,11 +42,11 @@ describe('createGraceful', () => {
 
   it('middleware returns 502 during shutdown', () => new Promise<void>((resolve) => {
     const server = createServer();
-    const { middleware, start } = createGraceful();
+    const { middleware, start } = createGraceful({ port: PORT });
     const res = createRes();
     const next = vi.fn();
 
-    start(server as never, { port: PORT });
+    start(server as never);
     process.kill(process.pid, SIGNAL);
 
     process.once(SIGNAL, () => {
@@ -62,34 +63,34 @@ describe('createGraceful', () => {
 
   it('starts listening on port', () => {
     const server = createServer();
-    const { start } = createGraceful();
+    const { start } = createGraceful({ port: PORT });
 
-    start(server as never, { port: PORT });
+    start(server as never);
 
     expect(server.listen).toHaveBeenCalledWith(PORT, expect.any(Function));
   });
 
   it('starts listening with host', () => {
     const server = createServer();
-    const { start } = createGraceful();
     const host = 'example.com';
+    const { start } = createGraceful({ port: PORT, host });
 
-    start(server as never, { port: PORT, host });
+    start(server as never);
 
     expect(server.listen).toHaveBeenCalledWith(PORT, host, expect.any(Function));
   });
 
-  it('calls shutdown handler on signal', () => new Promise<void>((resolve) => {
+  it('calls onShutdown handler on signal', () => new Promise<void>((resolve) => {
     const server = createServer();
-    const { start } = createGraceful();
-    const handler = vi.fn();
+    const onShutdown = vi.fn();
+    const { start } = createGraceful({ port: PORT, onShutdown });
 
-    start(server as never, { port: PORT }, handler);
+    start(server as never);
     process.kill(process.pid, SIGNAL);
 
     process.once(SIGNAL, () => {
       process.nextTick(() => {
-        expect(handler).toHaveBeenCalledWith(SIGNAL);
+        expect(onShutdown).toHaveBeenCalledWith(SIGNAL);
         resolve();
       });
     });
@@ -97,9 +98,9 @@ describe('createGraceful', () => {
 
   it('calls server.close() on signal', () => new Promise<void>((resolve) => {
     const server = createServer();
-    const { start } = createGraceful();
+    const { start } = createGraceful({ port: PORT });
 
-    start(server as never, { port: PORT });
+    start(server as never);
     process.kill(process.pid, SIGNAL);
 
     process.once(SIGNAL, () => {
@@ -110,13 +111,28 @@ describe('createGraceful', () => {
     });
   }));
 
+  it('calls closeIdleConnections() on signal', () => new Promise<void>((resolve) => {
+    const server = createServer();
+    const { start } = createGraceful({ port: PORT });
+
+    start(server as never);
+    process.kill(process.pid, SIGNAL);
+
+    process.once(SIGNAL, () => {
+      process.nextTick(() => {
+        expect(server.closeIdleConnections).toHaveBeenCalledOnce();
+        resolve();
+      });
+    });
+  }));
+
   it('calls process.exit(1) after timeout', () => new Promise<void>((resolve) => {
     vi.useFakeTimers();
     const server = createServer();
-    const { start } = createGraceful();
     const TIMEOUT = 1000;
+    const { start } = createGraceful({ port: PORT, timeout: TIMEOUT });
 
-    start(server as never, { port: PORT, timeout: TIMEOUT });
+    start(server as never);
     process.kill(process.pid, SIGNAL);
 
     process.once(SIGNAL, () => {
@@ -130,14 +146,26 @@ describe('createGraceful', () => {
     });
   }));
 
+  it('calls onReady after server binds', () => {
+    const server = createServer();
+    const onReady = vi.fn();
+    const { start } = createGraceful({ port: PORT, onReady });
+
+    start(server as never);
+    const listenCallback = server.listen.mock.calls[0].at(-1) as () => void;
+    listenCallback();
+
+    expect(onReady).toHaveBeenCalledOnce();
+  });
+
   it('instances are isolated', () => {
     const serverA = createServer();
     const serverB = createServer();
-    const { start: startA } = createGraceful();
-    const { start: startB } = createGraceful();
+    const { start: startA } = createGraceful({ port: 3001 });
+    const { start: startB } = createGraceful({ port: 3002 });
 
-    startA(serverA as never, { port: 3001 });
-    startB(serverB as never, { port: 3002 });
+    startA(serverA as never);
+    startB(serverB as never);
 
     expect(serverA.listen).toHaveBeenCalledWith(3001, expect.any(Function));
     expect(serverB.listen).toHaveBeenCalledWith(3002, expect.any(Function));
