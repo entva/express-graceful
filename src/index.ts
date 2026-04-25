@@ -1,33 +1,31 @@
 import type { Application, Request, Response, NextFunction } from 'express';
 import type { Server } from 'http';
-import logger from 'debug';
-
-const debug = logger('@entva/express-graceful');
 
 const events = [
   'SIGTERM',
   'SIGINT',
 ];
 
+const isDebug = process.env.DEBUG?.includes('express-graceful');
 let isShuttingDown = false;
 let processTimeout = 1000;
 let httpListener: Server;
 let onClose: ((event: string) => void) | undefined;
 
 const handleClose = () => {
-  debug('Closed remaining connections.');
+  if (isDebug) console.info('Closed remaining connections.');
   process.exit(0);
 };
 
 const handleTimeout = () => {
-  debug('Couldn\'t close connections in time, forcefully shutting down.');
+  if (isDebug) console.info('Couldn\'t close connections in time, forcefully shutting down.');
   process.exit(1);
 };
 
 const getShutdownHandler = (event: string) => () => {
   if (isShuttingDown) return false;
 
-  debug(`Received ${event}, shutting down.`);
+  if (isDebug) console.info(`Received ${event}, shutting down.`);
 
   isShuttingDown = true;
   httpListener.close(handleClose);
