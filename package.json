@@ -29,7 +29,7 @@
   "scripts": {
     "clean": "rm -rf ./dist ./esm",
     "prebuild": "npm run clean",
-    "build:cjs": "tsc -p tsconfig-build-cjs.json",
+    "build:cjs": "tsc -p tsconfig-build.json --module commonjs --moduleResolution bundler --outDir dist",
     "build:esm": "tsc -p tsconfig-build.json --target es2018 --outDir esm && mv esm/index.js esm/index.mjs",
     "build": "npm run build:esm && npm run build:cjs",
     "reinstall": "rm -rf node_modules package-lock.json && npm install",
