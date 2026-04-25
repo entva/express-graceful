@@ -51,10 +51,11 @@ type Options = {
   host?: string,
   port?: number,
   timeout?: number,
+  logger?: (message: string) => void,
 };
 type Handler = (event: string) => void;
 export const start = (app: Application, options?: Options, handler?: Handler) => {
-  const { host, port, timeout } = { ...defaultOptions, ...options };
+  const { host, port, timeout, logger } = { ...defaultOptions, ...options };
 
   const message = `Server listening on http://${host || 'localhost'}:${port}`;
 
@@ -62,7 +63,7 @@ export const start = (app: Application, options?: Options, handler?: Handler) =>
   onClose = handler;
 
   const sendEvents = (text: string) => {
-    console.log(text);
+    logger?.(text);
     if (process.connected) process.send?.('ready');
   };
 
