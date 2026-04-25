@@ -6,7 +6,8 @@
   "readmeFilename": "README.md",
   "repository": "entva/express-graceful",
   "bugs": "https://github.com/entva/express-graceful/issues",
-  "version": "1.1.0",
+  "version": "2.0.0",
+  "type": "module",
   "keywords": [
     "express",
     "expressjs",
@@ -28,13 +29,13 @@
   "scripts": {
     "clean": "rm -rf ./dist ./esm",
     "prebuild": "npm run clean",
-    "build:cjs": "tsc -p tsconfig-build.json --module commonjs --outDir dist",
+    "build:cjs": "tsc -p tsconfig-build-cjs.json",
     "build:esm": "tsc -p tsconfig-build.json --target es2018 --outDir esm && mv esm/index.js esm/index.mjs",
     "build": "npm run build:esm && npm run build:cjs",
     "reinstall": "rm -rf node_modules package-lock.json && npm install",
     "lint": "eslint ./",
     "prepublishOnly": "npm run lint && npm test && echo \"\\033[0;32mReady to publish\\033[0m\"",
-    "test": "mocha"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

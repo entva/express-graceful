@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig-build.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
+    "outDir": "./dist"
+  }
+}
