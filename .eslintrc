@@ -1,4 +1,0 @@
-{
-  "extends": ["entva-typescript-base"],
-  "ignorePatterns": ["node_modules", "dist", "esm"]
-}

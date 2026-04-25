@@ -1,77 +1,79 @@
 import type { Application, Request, Response, NextFunction } from 'express';
 import type { Server } from 'http';
 
-const events = [
-  'SIGTERM',
-  'SIGINT',
-];
+const SIGNALS = ['SIGTERM', 'SIGINT'] as const;
+const DEFAULT_TIMEOUT = 1000 * 10;
 
-const isDebug = process.env.DEBUG?.includes('express-graceful');
-let isShuttingDown = false;
-let processTimeout = 1000;
-let httpListener: Server;
-let onClose: ((event: string) => void) | undefined;
+export type SigEvent = typeof SIGNALS[number];
 
-const handleClose = () => {
-  if (isDebug) console.info('Closed remaining connections.');
-  process.exit(0);
-};
-
-const handleTimeout = () => {
-  if (isDebug) console.info('Couldn\'t close connections in time, forcefully shutting down.');
-  process.exit(1);
-};
-
-const getShutdownHandler = (event: string) => () => {
-  if (isShuttingDown) return false;
-
-  if (isDebug) console.info(`Received ${event}, shutting down.`);
-
-  isShuttingDown = true;
-  httpListener.close(handleClose);
-  if (typeof onClose === 'function') onClose(event);
-
-  setTimeout(handleTimeout, processTimeout);
-  return true;
-};
-
-export const middleware = (req: Request, res: Response, next: NextFunction) => {
-  if (!isShuttingDown) return next();
-  res.setHeader('Connection', 'close');
-  res.status(502).send('Server is shutting down.');
-};
-
-export const shutdownMiddleware = () => middleware;
-
-const defaultOptions = {
-  port: 3000,
-  timeout: 1000,
-};
-type Options = {
+export type GracefulOptions = {
   host?: string,
   port?: number,
   timeout?: number,
-  logger?: (message: string) => void,
+  logger?: (...args: unknown[]) => void,
+  onReady?: () => void,
+  onShutdown?: (event: SigEvent) => void,
 };
-type Handler = (event: string) => void;
-export const start = (app: Application, options?: Options, handler?: Handler) => {
-  const { host, port, timeout, logger } = { ...defaultOptions, ...options };
 
-  const message = `Server listening on http://${host || 'localhost'}:${port}`;
+export type GracefulInstance = {
+  middleware: (req: Request, res: Response, next: NextFunction) => void,
+  start: (app: Application) => void,
+};
 
-  if (typeof timeout === 'number') processTimeout = timeout;
-  onClose = handler;
+export const createGraceful = (options?: GracefulOptions): GracefulInstance => {
+  const {
+    host,
+    port = 3000,
+    timeout = DEFAULT_TIMEOUT,
+    logger,
+    onReady,
+    onShutdown,
+  } = options ?? {};
+  let isShuttingDown = false;
+  let httpListener: Server;
 
-  const sendEvents = (text: string) => {
-    logger?.(text);
-    if (process.connected) process.send?.('ready');
+  const middleware = (_req: Request, res: Response, next: NextFunction) => {
+    if (!isShuttingDown) return next();
+    res.setHeader('Connection', 'close');
+    res.status(502).send('Server is shutting down.');
   };
 
-  if (host) {
-    httpListener = app.listen(port, host, () => sendEvents(`${message} (bound to host: ${host})`));
-  } else {
-    httpListener = app.listen(port, () => sendEvents(message));
-  }
+  const getShutdownHandler = (event: SigEvent) => () => {
+    if (isShuttingDown) return false;
 
-  events.forEach((event) => process.on(event, getShutdownHandler(event)));
+    logger?.(`Received ${event}, shutting down...`);
+
+    isShuttingDown = true;
+    httpListener.close(() => {
+      logger?.('Closed remaining connections.');
+      process.exit(0);
+    });
+    httpListener.closeIdleConnections();
+
+    setTimeout(() => {
+      logger?.("Couldn't close connections in time, forcefully shutting down.");
+      process.exit(1);
+    }, timeout);
+
+    onShutdown?.(event);
+  };
+
+  const start = (app: Application) => {
+    const message = `Server listening on http://${host ?? 'localhost'}:${port}`;
+
+    const sendEvents = (text: string) => {
+      logger?.(text);
+      onReady?.();
+    };
+
+    if (host) {
+      httpListener = app.listen(port, host, () => sendEvents(`${message} (bound to host: ${host})`));
+    } else {
+      httpListener = app.listen(port, () => sendEvents(message));
+    }
+
+    SIGNALS.forEach((event) => process.on(event, getShutdownHandler(event)));
+  };
+
+  return { middleware, start };
 };
