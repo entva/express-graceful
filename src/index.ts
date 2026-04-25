@@ -2,23 +2,33 @@ import type { Application, Request, Response, NextFunction } from 'express';
 import type { Server } from 'http';
 
 const SIGNALS = ['SIGTERM', 'SIGINT'] as const;
+const DEFAULT_TIMEOUT = 1000 * 10;
 
-type Options = {
+export type SigEvent = typeof SIGNALS[number];
+
+export type GracefulOptions = {
   host?: string,
   port?: number,
   timeout?: number,
-  logger?: (message: string) => void,
-  onReady?: (event: string) => void,
-  onShutdown?: (event: string) => void,
+  logger?: (...args: unknown[]) => void,
+  onReady?: () => void,
+  onShutdown?: (event: SigEvent) => void,
 };
 
-type GracefulInstance = {
+export type GracefulInstance = {
   middleware: (req: Request, res: Response, next: NextFunction) => void,
   start: (app: Application) => void,
 };
 
-export const createGraceful = (options?: Options): GracefulInstance => {
-  const { host, port = 3000, timeout = 1000, logger, onReady, onShutdown } = options ?? {};
+export const createGraceful = (options?: GracefulOptions): GracefulInstance => {
+  const {
+    host,
+    port = 3000,
+    timeout = DEFAULT_TIMEOUT,
+    logger,
+    onReady,
+    onShutdown,
+  } = options ?? {};
   let isShuttingDown = false;
   let httpListener: Server;
 
@@ -28,7 +38,7 @@ export const createGraceful = (options?: Options): GracefulInstance => {
     res.status(502).send('Server is shutting down.');
   };
 
-  const getShutdownHandler = (event: string) => () => {
+  const getShutdownHandler = (event: SigEvent) => () => {
     if (isShuttingDown) return false;
 
     logger?.(`Received ${event}, shutting down...`);
@@ -38,15 +48,14 @@ export const createGraceful = (options?: Options): GracefulInstance => {
       logger?.('Closed remaining connections.');
       process.exit(0);
     });
-
-    onShutdown?.(event);
+    httpListener.closeIdleConnections();
 
     setTimeout(() => {
       logger?.("Couldn't close connections in time, forcefully shutting down.");
       process.exit(1);
     }, timeout);
 
-    return true;
+    onShutdown?.(event);
   };
 
   const start = (app: Application) => {
@@ -54,8 +63,7 @@ export const createGraceful = (options?: Options): GracefulInstance => {
 
     const sendEvents = (text: string) => {
       logger?.(text);
-      if (process.connected) process.send?.('ready');
-      onReady?.('ready');
+      onReady?.();
     };
 
     if (host) {
